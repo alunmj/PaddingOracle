@@ -36,8 +36,6 @@ namespace PadOracle
 
             // I used to go from last block to first, to show handling the special case of existing padding 
             // But the message reads better if we go forward.
-            ParallelOptions paropts = new ParallelOptions() { MaxDegreeOfParallelism = 1 };
-
             for(int nBlock = 0; nBlock < nBlocks; nBlock++) {
                 thisPlainBlock = MutateBlock(nBlock, nBlock == nBlocks - 1);
 
