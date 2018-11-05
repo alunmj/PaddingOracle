@@ -11,7 +11,7 @@ See if there are any optimisations you can think of. It's still very slow, perha
 
 Command line arguments are now added in the PadOracle program:
 
-PadOracle &lt;url> -c &lt;cipher-reg> [-i &lt;iv-reg>] [-iv0] [-b &lt;blocksize:16>] [-t &lt;encoding:b64|b64URL|hex|HEX>] [-v] [-p <parallelism:-1|1>] [-h]<br/>
+PadOracle &lt;url> -c &lt;cipher-reg> [-i &lt;iv-reg>] [-iv0] [-b &lt;blocksize:16>] [-t &lt;encoding:b64|b64URL|hex|HEX>] [-v] [-p &lt;parallelism:-1|1>] [-h]<br/>
 &nbsp;&nbsp;&lt;cipher-reg>: a regex matching the entire ciphertext in the &lt;url> parameter<br/>
 &nbsp;&nbsp;&lt;iv-reg>: a regex matching the initialisation vector in the &lt;url> parameter, if separate<br/>
 &nbsp;&nbsp;&lt;blocksize>: blocksize in bytes. Defaults to 16.<br/>
