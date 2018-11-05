@@ -1,12 +1,5 @@
 ﻿<?xml version='1.0' encoding='utf-8'?>
-<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="PadOracle.Properties" GeneratedClassName="Settings">
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)">
   <Profiles />
-  <Settings>
-    <Setting Name="hostName" Type="System.String" Scope="Application">
-      <Value Profile="(Default)">localhost:31140</Value>
-    </Setting>
-    <Setting Name="blockSize" Type="System.Int32" Scope="Application">
-      <Value Profile="(Default)">16</Value>
-    </Setting>
-  </Settings>
+  <Settings />
 </SettingsFile>
