@@ -14,6 +14,7 @@ namespace PadOracle
             // TODO: Logging input & output; interrupt / resume.
             string baseUrl = null, cipherReg = null, ivReg = null;
             string encryptMe = null;
+            string exceptString = null;// "paddingexception";
             int blocksize = 16;
             bool bShowStats = false;
             int parallelism = -1;
@@ -105,6 +106,14 @@ namespace PadOracle
                                 throw new ArgumentException("-p requires an integer parameter of maximum number of threads. -1 (max parallelism) and 1 (no parallelism) are good values.");
                             }
                             break;
+                        case "x":
+                        case "exceptiontext":
+                            if (!bMaybeParameter)
+                            {
+                                throw new ArgumentException("-x requires a string parameter of a string to find in the result indicating a padding exception");
+                            }
+                            exceptString = args[++i];
+                            break;
                         case "h":
                         case "help":
                             // Something a bit more than the usage message.
@@ -166,6 +175,7 @@ HEX - upper-case hex
             CryptTarget target = new CryptTarget(parser);
             target.ParallelThreads = parallelism;
             target.Verbose = bShowStats;
+            target.ExceptString = exceptString;
             if (encryptMe == null)
             {
                 Console.WriteLine("Beginning decryption of ciphertext. This may take some time.");
@@ -174,7 +184,7 @@ HEX - upper-case hex
             }
             else
             {
-                Console.WriteLine("Beginning decryption of ciphertext. This may take a very long time.");
+                Console.WriteLine("Beginning encryption of plaintext. This may take a very long time.");
                 string encrypted = target.Encrypt(encryptMe);
                 Console.WriteLine($"Encrypted string in URL is:\n{encrypted}");
             }
@@ -191,6 +201,7 @@ HEX - upper-case hex
                 "\n-t/-textencoding/encoding - [optional] Encoding type - b64, b64URL, hex" +
                 "\n-e/-encrypt - [optional] - instead of decrypting, encrypt the provided string" +
                 "\n-p/-parallelism - [optional] - MaxDegreeOfParallelism. -1 to use all CPUs, 1 to use 1." +
+                "\n-x/-exceptiontext - [optional] - a set piece of text that occurs in the response if the padding is wrong. (Otherwise, the program guesses)" +
                 "\n-h/-help - [optional] - display slightly more detailed help." +
                 "\n\nContact alun@texis.com with questions about this tool.");
         }

